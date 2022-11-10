@@ -5,9 +5,6 @@ from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_
 import math
 import torch.nn as nn
 
-dataset = CommentaryDataset(en_tokens, zh_tokens)
-train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
-
 
 # PE采用公式计算而非训练得到
 class PositionalEncoding(nn.Module):
@@ -31,3 +28,26 @@ class PositionalEncoding(nn.Module):
         # 输入的最终编码 = word_embedding + positional_embedding
         x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)  # size = [batch, L, d_model]
         return self.dropout(x)  # size = [batch, L, d_model]
+
+
+class TranslateModel(nn.Module):
+    def __init__(self, d_model, src_vocab, tgt_vocab, drop_rate=0.1):
+        super(TranslateModel, self).__init__()
+        # embedding and PE
+        self.src_embedding = nn.Embedding(len(src_vocab), d_model, padding_idx=2)
+        self.tgt_embedding = nn.Embedding(len(tgt_vocab), d_model, padding_idx=2)
+        self.PE = PositionalEncoding(d_model, drop_rate)
+        # transformer
+        self.transformer = nn.Transformer(d_model, dropout=drop_rate, batch_first=True)
+
+        self.linear = nn.Linear(d_model, len(tgt_vocab))
+
+    def forward(self, src, tgt):
+        # src: 原batch后的句子，例如[[0, 12, 34, .., 1, 2, 2, ...], ...]
+        # tgt: 目标batch后的句子，例如[[0, 74, 56, .., 1, 2, 2, ...], ...]
+
+        return
+
+
+dataset = CommentaryDataset(en_tokens, zh_tokens)
+train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
