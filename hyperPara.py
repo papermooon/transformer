@@ -4,7 +4,7 @@ from pathlib import Path
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 work_dir = Path("./dataset")
 model_dir = Path("./model")
-model_checkpoint = None
+checkpoint = None
 
 # 中英文句子的文件路径
 en_filepath = './dataset/news-commentary-v13.zh-en.en'

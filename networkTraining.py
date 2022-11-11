@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from hyperPara import *
 from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_fn, en_vocab, zh_vocab
 import math
@@ -66,6 +67,8 @@ class TranslateModel(nn.Module):
             tgt_key_padding_mask=tgt_key_mask,
         )
 
+        output = self.linear(output)
+
         return output
 
     @staticmethod
@@ -75,16 +78,14 @@ class TranslateModel(nn.Module):
         return key_padding_mask
 
 
+# 载入模型
+if checkpoint is not None:
+    model = torch.load(model_dir / checkpoint)
+else:
+    model = TranslateModel(256, en_vocab, zh_vocab)
+
 dataset = CommentaryDataset(en_tokens, zh_tokens)
 train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
-
-src, tgt, tgt_y, n_tokens = next(iter(train_iter))
-src, tgt, tgt_y = src.to(device), tgt.to(device), tgt_y.to(device)
-print("src.size:", src.size())
-print("tgt.size:", tgt.size())
-print("tgt_y.size:", tgt_y.size())
-print("n_tokens:", n_tokens)
-
-model = TranslateModel(256, en_vocab, zh_vocab).to(device)
-tmp = model(src, tgt).size()
-print(model(src, tgt), tmp)
+optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+loss = nn.CrossEntropyLoss(ignore_index=2)
+writer = SummaryWriter(log_dir='runs/CE_loss_plot')
