@@ -81,7 +81,7 @@ class TranslateModel(nn.Module):
 if checkpoint is not None:
     model = torch.load(model_dir / checkpoint)
 else:
-    model = TranslateModel(256, en_vocab, zh_vocab)
+    model = TranslateModel(128, en_vocab, zh_vocab)
 model.to(device)
 
 dataset = CommentaryDataset(en_tokens, zh_tokens)
