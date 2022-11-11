@@ -1,20 +1,9 @@
 import os
-import math
-
-import numpy as np
-import torch
-import torch.nn as nn
 from tokenizers import Tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from torch.nn.functional import pad, log_softmax
-from pathlib import Path
-from tqdm import tqdm
+from torch.nn.functional import pad
 from hyperPara import *
-from torch.utils.data import TensorDataset
-from torch.utils.data import DataLoader
 
 
 # 划分数据集、测试集

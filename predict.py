@@ -1,5 +1,4 @@
 import math
-from tkinter import Variable
 import torch.nn as nn
 from hyperPara import *
 from process import en_vocab, en_tokenizer, zh_vocab
