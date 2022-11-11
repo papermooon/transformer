@@ -1,7 +1,8 @@
+import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from hyperPara import *
-from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_fn
+from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_fn, en_vocab, zh_vocab
 import math
 import torch.nn as nn
 
@@ -13,7 +14,7 @@ class PositionalEncoding(nn.Module):
         # 定义drop out
         self.dropout = nn.Dropout(p=dropout)
         # 计算pe编码
-        pe = torch.zeros(max_len, d_model)  # 建立空表，每行代表一个词的位置，每列代表一个编码位
+        pe = torch.zeros(max_len, d_model).to(device)  # 建立空表，每行代表一个词的位置，每列代表一个编码位
         position = torch.arange(0, max_len).unsqueeze(1)  # 建个arrange表示词的位置以便公式计算，size=(max_len,1)
         # torch.arange(start=1.0,end=6.0)和range区别,arrange生成浮点数值为start~end的数组但不包括end
         # unsqueeze(i)压缩，增加维数，在第i+1个维度上再加一维
@@ -46,8 +47,44 @@ class TranslateModel(nn.Module):
         # src: 原batch后的句子，例如[[0, 12, 34, .., 1, 2, 2, ...], ...]
         # tgt: 目标batch后的句子，例如[[0, 74, 56, .., 1, 2, 2, ...], ...]
 
-        return
+        tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size()[-1]).to(device)
+
+        src_key_mask = TranslateModel.get_key_padding_mask(src)
+
+        tgt_key_mask = TranslateModel.get_key_padding_mask(tgt)
+
+        src = self.src_embedding(src)
+        src = self.PE(src)
+
+        tgt = self.tgt_embedding(tgt)
+        tgt = self.PE(tgt)
+
+        # print(src.device, tgt.device, tgt_mask.device, src_key_mask.device, tgt_key_mask.device)
+        output = self.transformer(
+            src, tgt, tgt_mask=tgt_mask,
+            src_key_padding_mask=src_key_mask,
+            tgt_key_padding_mask=tgt_key_mask,
+        )
+
+        return output
+
+    @staticmethod
+    def get_key_padding_mask(tokens):
+        key_padding_mask = torch.zeros(tokens.size(), dtype=torch.bool).to(device)
+        key_padding_mask[tokens == 2] = True
+        return key_padding_mask
 
 
 dataset = CommentaryDataset(en_tokens, zh_tokens)
 train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
+
+src, tgt, tgt_y, n_tokens = next(iter(train_iter))
+src, tgt, tgt_y = src.to(device), tgt.to(device), tgt_y.to(device)
+print("src.size:", src.size())
+print("tgt.size:", tgt.size())
+print("tgt_y.size:", tgt_y.size())
+print("n_tokens:", n_tokens)
+
+model = TranslateModel(256, en_vocab, zh_vocab).to(device)
+tmp = model(src, tgt).size()
+print(model(src, tgt), tmp)
