@@ -1,4 +1,3 @@
-import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -6,6 +5,7 @@ from hyperPara import *
 from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_fn, en_vocab, zh_vocab
 import math
 import torch.nn as nn
+from tqdm import tqdm
 
 
 # PE采用公式计算而非训练得到
@@ -51,7 +51,6 @@ class TranslateModel(nn.Module):
         tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size()[-1]).to(device)
 
         src_key_mask = TranslateModel.get_key_padding_mask(src)
-
         tgt_key_mask = TranslateModel.get_key_padding_mask(tgt)
 
         src = self.src_embedding(src)
@@ -83,9 +82,51 @@ if checkpoint is not None:
     model = torch.load(model_dir / checkpoint)
 else:
     model = TranslateModel(256, en_vocab, zh_vocab)
+model.to(device)
 
 dataset = CommentaryDataset(en_tokens, zh_tokens)
 train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-loss = nn.CrossEntropyLoss(ignore_index=2)
+criteria = nn.CrossEntropyLoss(ignore_index=2)
 writer = SummaryWriter(log_dir='runs/CE_loss_plot')
+current_step = 0
+
+model.train()
+for epoch in range(epochs):
+    loop = tqdm(enumerate(train_iter), total=len(train_iter))
+    for batch_data in train_iter:
+        optimizer.zero_grad()
+
+        raw, feed, label, valid_token = batch_data
+        raw = raw.to(device)
+        feed = feed.to(device)
+        label = label.to(device)
+
+        output = model(raw, feed)
+        loss = criteria(output.contiguous().view(-1, output.size(-1)), label.contiguous().view(-1)) / valid_token
+        loss.backward()
+        optimizer.step()
+
+        writer.add_scalar(tag="loss",  # 可以理解为图像的名字
+                          scalar_value=loss.item(),  # 纵坐标的值
+                          global_step=current_step  # 当前是第几次迭代，可以理解为横坐标的值
+                          )
+        current_step = current_step + 1
+
+        loop.set_description("Epoch {}/{}".format(epoch+1, epochs))
+        loop.set_postfix(loss=loss.item())
+        loop.update(1)
+    torch.save(model, model_dir / f"model_epoch_{epoch}.pt")
+# src, tgt, tgt_y, n_tokens = next(iter(train_iter))
+# src, tgt, tgt_y = src.to(device), tgt.to(device), tgt_y.to(device)
+# print("src.size:", src.size())
+# print("tgt.size:", tgt.size())
+# print("tgt_y.size:", tgt_y.size())
+# print("n_tokens:", n_tokens)
+# print("src example:", src[0])
+# print("tgt example:", tgt[0])
+# tmp=model(src, tgt)
+# y=torch.argmax(tmp,dim=2)
+# tmp2=tmp.size()
+# print(tmp,tmp2)
+# print(y,y.size())
