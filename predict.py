@@ -1,13 +1,8 @@
-from datetime import datetime
-
-from torch.autograd import Variable
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from hyperPara import *
-from process import CommentaryDataset, en_tokens, zh_tokens, commentary_collate_fn, en_vocab, zh_vocab
 import math
+from tkinter import Variable
 import torch.nn as nn
-from tqdm import tqdm
+from hyperPara import *
+from process import en_vocab, en_tokenizer, zh_vocab
 
 
 # PE采用公式计算而非训练得到
@@ -30,7 +25,7 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         # 输入的最终编码 = word_embedding + positional_embedding
-        x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)  # size = [batch, L, d_model]
+        x = x + self.pe[:, : x.size(1)].requires_grad_(False)
         return self.dropout(x)  # size = [batch, L, d_model]
 
 
@@ -79,62 +74,33 @@ class TranslateModel(nn.Module):
         return key_padding_mask
 
 
-# 载入模型
-if checkpoint is not None:
+def translate(src: str):
     model = torch.load(model_dir / checkpoint)
-    print("加载模型:", checkpoint)
-else:
-    model = TranslateModel(128, en_vocab, zh_vocab)
-model.to(device)
+    model.eval()
+    src = torch.tensor([0] + en_vocab(en_tokenizer(src)) + [1]).unsqueeze(0).to(device)
+    tgt = torch.tensor([[0]]).to(device)
+    for i in range(max_length):
+        # 进行transformer计算
+        out = model(src, tgt)
+        # 预测结果，因为只需要看最后一个词，所以取`out[:, -1]`
+        predict = out[:, -1]
+        # 找出最大值的index
+        y = torch.argmax(predict, dim=1)
+        # 和之前的预测结果拼接到一起
+        tgt = torch.concat([tgt, y.unsqueeze(0)], dim=1)
+        if y == 1:
+            break
+    # 将预测tokens拼起来
+    tgt = ''.join(zh_vocab.lookup_tokens(tgt.squeeze().tolist())).replace("<bos>", "").replace("<eos>", "")
+    return tgt
 
-dataset = CommentaryDataset(en_tokens, zh_tokens)
-train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
-optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-criteria = nn.CrossEntropyLoss(ignore_index=2)
-writer = SummaryWriter(log_dir='runs/CE_loss_plot')
-current_step = 0
 
-model.train()
-for epoch in range(epochs):
-    loop = tqdm(enumerate(train_iter), total=len(train_iter))
-    for batch_data in train_iter:
-        optimizer.zero_grad()
-
-        raw, feed, label, valid_token = batch_data
-        raw = raw.to(device)
-        feed = feed.to(device)
-        label = label.to(device)
-
-        output = model(raw, feed)
-
-        # print(output.size())
-        # print(output)
-        # print(label.size())
-        # print(label)
-
-        predict = output.contiguous().view(-1, output.size(-1))
-        label = label.contiguous().view(-1)
-
-        # print(predict.size())
-        # print(predict)
-        # print(label.size())
-        # print(label)
-
-        loss = criteria(predict, label) / valid_token
-        loss.backward()
-        optimizer.step()
-
-        writer.add_scalar(tag="loss",  # 可以理解为图像的名字
-                          scalar_value=loss.item(),  # 纵坐标的值
-                          global_step=current_step  # 当前是第几次迭代，可以理解为横坐标的值
-                          )
-        current_step = current_step + 1
-
-        loop.set_description("Epoch {}/{}".format(epoch + 1, epochs))
-        loop.set_postfix(loss=loss.item())
-        loop.update(1)
-
-    now_time = datetime.datetime.now()
-    time_str = datetime.datetime.strftime(now_time,'%m-%d_%H:%M:%S')
-    torch.save(model, model_dir / f"model_epoch_{epoch}_{time_str}.pt")
-
+print(translate(
+    "For example, lobbying education leaders to keep girls in school longer has contributed to providing young people with the knowledge and agency to make smart decisions about when and with whom to negotiate safe sex."))
+print(translate("you are a shit translation system!"))
+print(translate("The NCD and AIDS communities can learn from one another."))
+print(translate("And, in fact, albedo modification would undoubtedly make some things worse."))
+print(translate("One reason for this is concern about the diversion of resources from other approaches."))
+print(translate("In 1997,I am a pig."))
+print(translate("maybe i made a huge mistake."))
+print(translate("it is a failure."))
