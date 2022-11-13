@@ -1,4 +1,6 @@
 import math
+
+import torch
 import torch.nn as nn
 from hyperPara import *
 from process import en_vocab, en_tokenizer, zh_vocab
@@ -79,27 +81,86 @@ def translate(src: str):
     src = torch.tensor([0] + en_vocab(en_tokenizer(src)) + [1]).unsqueeze(0).to(device)
     tgt = torch.tensor([[0]]).to(device)
     for i in range(max_length):
-        # 进行transformer计算
         out = model(src, tgt)
-        # 预测结果，因为只需要看最后一个词，所以取`out[:, -1]`
         predict = out[:, -1]
-        # 找出最大值的index
         y = torch.argmax(predict, dim=1)
-        # 和之前的预测结果拼接到一起
         tgt = torch.concat([tgt, y.unsqueeze(0)], dim=1)
         if y == 1:
             break
-    # 将预测tokens拼起来
     tgt = ''.join(zh_vocab.lookup_tokens(tgt.squeeze().tolist())).replace("<bos>", "").replace("<eos>", "")
     return tgt
 
 
-print(translate(
-    "For example, lobbying education leaders to keep girls in school longer has contributed to providing young people with the knowledge and agency to make smart decisions about when and with whom to negotiate safe sex."))
-print(translate("you are a shit translation system!"))
-print(translate("The NCD and AIDS communities can learn from one another."))
-print(translate("And, in fact, albedo modification would undoubtedly make some things worse."))
-print(translate("One reason for this is concern about the diversion of resources from other approaches."))
-print(translate("In 1997,I am a pig."))
-print(translate("maybe i made a huge mistake."))
-print(translate("it is a failure."))
+# 单样本的bm search
+def translate_bs(src: str, beam_size: int):
+    model = torch.load(model_dir / checkpoint)
+    model.eval()
+
+    src = torch.tensor([0] + en_vocab(en_tokenizer(src)) + [1]).unsqueeze(0).to(device)
+    src = src.repeat(beam_size, 1)
+    # src:bm_size*原句长度
+    # feed:bm_size*各自翻译长度
+
+    repeat = 1
+    complete = []
+    complete_scores = []
+    working_candidates = beam_size
+
+    candidates = torch.full((beam_size, 1), 0).to(device)
+    candidates_scores = torch.zeros_like(candidates)
+
+    while working_candidates != 0:
+        feed = torch.tensor(candidates, device=device)
+        output = model(src, feed)
+        predict = output[:, -1]  # W*Vocal
+        res = torch.log_softmax(predict, 1)  # W*Vocal
+        sum_res = torch.tensor(candidates_scores, device=device) + res
+        # 展平求topk
+        sum_res = sum_res.reshape(1, -1)  # 1,W*Vocal
+        relative_index = torch.topk(k=working_candidates, input=sum_res, dim=-1)  # 1*W
+        vocal = sum_res.shape[1] / working_candidates
+
+        next_candidates = []
+        next_scores = []
+
+        for ele in relative_index.indices.squeeze(0):
+            real_pos = torch.tensor([int(ele % vocal)], device=device)
+            pre_index = int(ele / vocal)
+            score = candidates_scores[pre_index]
+            pre_serial = candidates[pre_index]
+            next_serial = torch.cat((pre_serial, real_pos))
+
+            if real_pos == 1 or repeat == max_length:
+                working_candidates -= 1
+                complete.append(next_serial)
+                complete_scores.append(score)
+                print("haha")
+            else:
+                next_candidates.append(next_serial)
+                next_scores.append(score)
+
+        candidates = torch.stack(next_candidates, 0)
+        candidates_scores = torch.stack(next_scores, 0)
+
+        # print(candidates)
+        # print(candidates_scores)
+
+        repeat += 1
+    print(repeat)
+    print(complete)
+    print(complete_scores)
+    return src, beam_size
+
+
+# print(translate(
+#     "For example, lobbying education leaders to keep girls in school longer has contributed to providing young people with the knowledge and agency to make smart decisions about when and with whom to negotiate safe sex."))
+# print(translate("you are a shit translation system!"))
+# print(translate("The NCD and AIDS communities can learn from one another."))
+# print(translate("And, in fact, albedo modification would undoubtedly make some things worse."))
+# print(translate("One reason for this is concern about the diversion of resources from other approaches."))
+# print(translate("In 1997,I am a pig."))
+# print(translate("maybe i made a huge mistake."))
+# print(translate("it is a failure."))
+# print(translate("I love machine learning."))
+
+translate_bs("I love you", 3)

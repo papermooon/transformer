@@ -86,7 +86,6 @@ else:
     model = TranslateModel(128, en_vocab, zh_vocab)
 model.to(device)
 
-
 dataset = CommentaryDataset(en_tokens, zh_tokens)
 train_iter = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=commentary_collate_fn)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
@@ -107,7 +106,6 @@ for epoch in range(epochs):
 
         output = model(raw, feed)
 
-        # print(output.size())
         # print(output)
         # print(label.size())
         # print(label)
@@ -134,6 +132,6 @@ for epoch in range(epochs):
         loop.set_postfix(loss=loss.item())
         loop.update(1)
 
-    now_time = datetime.now().strftime('%m-%d_%H:%M:%S')
-    torch.save(model, model_dir/f"model_epoch_{epoch}_{now_time}.pt")
-
+    now_time = datetime.now().strftime('%m-%d_%H-%M')
+    save_name = "model_epoch_" + str(epoch) + "_" + now_time + ".pt"
+    torch.save(model, model_dir / save_name)
