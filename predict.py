@@ -1,6 +1,4 @@
 import math
-
-import torch
 import torch.nn as nn
 from hyperPara import *
 from process import en_vocab, en_tokenizer, zh_vocab
@@ -110,13 +108,22 @@ def translate_bs(src: str, beam_size: int):
     candidates_scores = torch.zeros_like(candidates)
 
     while working_candidates != 0:
-        src = base.repeat(working_candidates, 1)
-        feed = torch.tensor(candidates, device=device)
-        output = model(src, feed)
+        if repeat == 1:
+            base_feed = torch.tensor([[0]]).to(device)
+            output = model(base, base_feed)
+        else:
+            src = base.repeat(working_candidates, 1)
+            output = model(src, candidates)
+
         predict = output[:, -1]  # W*Vocal
         res = torch.log_softmax(predict, 1)  # W*Vocal
-        sum_res = torch.tensor(candidates_scores, device=device) + res
-        # 展平求topk
+
+        if repeat == 1:
+            sum_res = res
+        else:
+            sum_res = candidates_scores + res
+
+        # 展平求topK
         sum_res = sum_res.reshape(1, -1)  # 1,W*Vocal
         relative_index = torch.topk(k=working_candidates, input=sum_res, dim=-1)  # 1*W
 
@@ -126,7 +133,8 @@ def translate_bs(src: str, beam_size: int):
         for ele in relative_index.indices.squeeze(0):
             real_pos = torch.tensor([int(ele % vocal)], device=device)
             pre_index = int(ele / vocal)
-            score = candidates_scores[pre_index] + sum_res[0][ele]
+            score = sum_res[0][ele]
+
             pre_serial = candidates[pre_index]
             next_serial = torch.cat((pre_serial, real_pos))
 
@@ -141,44 +149,51 @@ def translate_bs(src: str, beam_size: int):
         if working_candidates == 0:
             break
         candidates = torch.stack(next_candidates, 0)
-        candidates_scores = torch.stack(next_scores, 0)
-
+        candidates_scores = torch.stack(next_scores, 0).unsqueeze(1)
         repeat += 1
+
     complete_scores = torch.stack(complete_scores, 0)
-    ans = complete[torch.argmax(complete_scores).item()]
-    tgt = ''.join(zh_vocab.lookup_tokens(ans.squeeze().tolist()))
+
+    index = 0
+    for ele in complete:
+        complete_scores[index] /= ele.shape[0]
+        index += 1
+
+    ans_index = torch.argmax(complete_scores)
+    ans = complete[ans_index]
+    tgt = ''.join(zh_vocab.lookup_tokens(ans.tolist())).replace("<bos>", "").replace("<eos>", "")
     return tgt
 
+
+print(translate("I love machine learning."))
+print(translate_bs("I love machine learning.", 8))
+
+print(translate("I love you."))
+print(translate_bs("I love you.", 8))
+
+print(translate("One reason for this is concern about the diversion of resources from other approaches."))
+print(translate_bs("One reason for this is concern about the diversion of resources from other approaches.", 8))
+
+print(translate("In 1997,I am a pig."))
+print(translate_bs("In 1997,I am a pig.", 8))
+#
+print(translate("maybe i made a huge mistake."))
+print(translate_bs("maybe i made a huge mistake.", 8))
+
+print(translate("it is a failure."))
+print(translate_bs("it is a failure.", 8))
 
 print(translate(
     "For example, lobbying education leaders to keep girls in school longer has contributed to providing young people with the knowledge and agency to make smart decisions about when and with whom to negotiate safe sex."))
 print(translate_bs(
     "For example, lobbying education leaders to keep girls in school longer has contributed to providing young people with the knowledge and agency to make smart decisions about when and with whom to negotiate safe sex.",
-    1))
+    8))
 
 print(translate("you are a shit translation system!"))
-print(translate_bs("you are a shit translation system!", 1))
+print(translate_bs("you are a shit translation system!", 8))
 
 print(translate("The NCD and AIDS communities can learn from one another."))
-print(translate_bs("The NCD and AIDS communities can learn from one another.", 1))
+print(translate_bs("The NCD and AIDS communities can learn from one another.", 8))
 
 print(translate("And, in fact, albedo modification would undoubtedly make some things worse."))
-print(translate_bs("And, in fact, albedo modification would undoubtedly make some things worse.", 1))
-
-print(translate("One reason for this is concern about the diversion of resources from other approaches."))
-print(translate_bs("One reason for this is concern about the diversion of resources from other approaches.", 1))
-
-print(translate("In 1997,I am a pig."))
-print(translate_bs("In 1997,I am a pig.", 1))
-
-print(translate("maybe i made a huge mistake."))
-print(translate_bs("maybe i made a huge mistake.", 1))
-
-print(translate("it is a failure."))
-print(translate_bs("it is a failure.", 1))
-
-print(translate("I love machine learning."))
-print(translate_bs("I love machine learning.", 1))
-
-print(translate("I love you."))
-print(translate_bs("I love you.", 1))
+print(translate_bs("And, in fact, albedo modification would undoubtedly make some things worse.", 8))
