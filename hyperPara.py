@@ -4,7 +4,9 @@ from pathlib import Path
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 work_dir = Path("./dataset")
 model_dir = Path("./model")
-checkpoint = "model_epoch_19_11-13_06-34.pt"
+
+checkpoint_next = "model_epoch_10_11-14_03-39.pt"
+checkpoint = "model_epoch_19_11-13_06-34.pt"  # 最有希望的
 
 # 中英文句子的文件路径
 en_filepath = './dataset/news-commentary-v13.zh-en.en'
@@ -27,3 +29,6 @@ zh_token_path = './dataset/zh_token.pt'
 max_length = 128
 batch_size = 64
 epochs = 20
+
+# max_length = 200
+# batch_size = 32
